@@ -1,2 +1,3 @@
 # HoverKart
 Code running on an ESP32 to control BLDC motors
+Controls 2 BLDC hoverboard motors with and ESP32. I built this to go on a cart or wagon. It uses bluetooth to pair to a phone and reads the RSSI signal strength to determine how far away it is from the paired phone. It has 3 untrasonic sensors 2 up front and one facing the rear and a forward facing Lidar. Using all the sensors for obstacle avoidance. The Motors movments can be tuned with PID control that is configurable through the paired phone thruough Bluetooth Terminal app, or a web interface that I recently added. This is still a work in progress. 
