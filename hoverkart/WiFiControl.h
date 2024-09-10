@@ -3,7 +3,8 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
-#include <ESPmDNS.h>  // For mDNS service to resolve hostname
+#include <ESPmDNS.h>
+#include "ErrorHandling.h"  // Include error handling for Wi-Fi issues
 
 // Wi-Fi credentials and settings
 const char* ssid = "HoverKart";
@@ -13,7 +14,7 @@ const char* hostname = "hoverkart";  // Hostname for the Wi-Fi AP
 // Web server object on port 80
 WebServer server(80);
 
-// PID tuning parameters and following distance variables (these can be changed via the web interface)
+// PID tuning parameters and following distance variables (configurable via web interface)
 double webKp = 2.5, webKi = 6.0, webKd = 1.2;
 int followingDistance = 100;
 int waitTime = 0;
@@ -27,6 +28,7 @@ void handleWaitMode();
 
 /**
    Set up the Wi-Fi Access Point (AP) mode, assign the hostname, and start the web server.
+   Includes error handling in case of failure.
 */
 void setupWiFi() {
   WiFi.softAP(ssid, password);
@@ -39,12 +41,13 @@ void setupWiFi() {
   // Start mDNS to resolve the hostname
   if (MDNS.begin(hostname)) {
     Serial.println("MDNS responder started");
-    MDNS.addService("http", "tcp", 80);  // Add service to make it accessible via http
+    MDNS.addService("http", "tcp", 80);  // Add HTTP service
   } else {
-    Serial.println("Error setting up MDNS responder.");
+    errorHandler.displayError(ErrorType::GENERAL_ERROR, "Error setting up MDNS responder.");
+    return;
   }
 
-  // Web server routes
+  // Set up web server routes
   server.on("/", handleRoot);
   server.on("/updatePID", handleUpdatePID);
   server.on("/updateDistance", handleUpdateDistance);
@@ -55,7 +58,8 @@ void setupWiFi() {
 }
 
 /**
-   Root webpage that allows control of PID values and following distance.
+   Root webpage that allows control of PID values, following distance, and wait mode.
+   Generates an HTML page for users to adjust settings.
 */
 void handleRoot() {
   String page = "<html><head><title>Kart Control</title></head><body>";
@@ -80,12 +84,13 @@ void handleRoot() {
 
   page += "</body></html>";
 
-  // Send the page content
+  // Send the page content to the client
   server.send(200, "text/html", page);
 }
 
 /**
    Handle the form submission for updating PID values.
+   Updates the PID parameters based on user input from the web form.
 */
 void handleUpdatePID() {
   if (server.hasArg("kp")) webKp = server.arg("kp").toDouble();
@@ -99,6 +104,7 @@ void handleUpdatePID() {
 
 /**
    Handle the form submission for updating the following distance.
+   Updates the following distance variable based on user input.
 */
 void handleUpdateDistance() {
   if (server.hasArg("distance")) followingDistance = server.arg("distance").toInt();
@@ -110,6 +116,7 @@ void handleUpdateDistance() {
 
 /**
    Handle the form submission for setting the wait mode timer.
+   Sets the wait mode timer based on user input from the web form.
 */
 void handleWaitMode() {
   if (server.hasArg("wait")) waitTime = server.arg("wait").toInt();
@@ -120,7 +127,8 @@ void handleWaitMode() {
 }
 
 /**
-   Call this function in the main loop to handle HTTP requests.
+   Handle HTTP client requests.
+   This function needs to be called in the loop to handle incoming web requests.
 */
 void handleClientRequests() {
   server.handleClient();
