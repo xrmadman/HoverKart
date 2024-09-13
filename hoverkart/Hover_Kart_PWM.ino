@@ -1,65 +1,65 @@
-#include <Arduino.h>
+//#include <Arduino.h>
 #include "PIDControl.h"
 #include "MotorControl.h"
 #include "Sensors.h"
 #include "BluetoothControl.h"
-#include "ErrorHandling.h"
-#include "WiFiControl.h"  // Wi-Fi control
+#include "WiFiControl.h"
 
-// Forward declaration of the handlePathfinding function
-void handlePathfinding(int phoneDistance, int lidarDistance);
+// Declare global variables for obstacle detection distances (from WiFiControl.h)
+extern int leftUltrasonicDistance;
+extern int rightUltrasonicDistance;
+extern int rearUltrasonicDistance;
+extern int lidarDistance;
+int rearUltrasonicDistance = 30;  // Example default value
+int lidarDistance = 300;          // Example default value
+int leftUltrasonicDistance = 30;  // Example default value
+int rightUltrasonicDistance = 30; // Example default value
 
-// Define the global instance of ErrorHandler
-ErrorHandler errorHandler;
 
 void setup() {
-  Serial.begin(115200);
-
   // Initialize all systems
-  setupSensors();  // Initialize sensors first
-  setupBluetooth("Hover_Kart");  // Initialize Bluetooth
-  setupMotors();  // Initialize motor controls
-  setupPID();  // Initialize PID control
+  setupSensors();
+  setupBluetooth("Hover_Kart");
+  setupMotors();
+  setupPID();
   setupWiFi();  // Initialize Wi-Fi and start the web server
 
-  Serial.println("Hover Kart setup complete.");
 }
 
 void loop() {
-  // Handle any errors
-  errorHandler.handleErrors();
-
-  // Handle HTTP requests (for Wi-Fi settings)
+  // Handle Wi-Fi client requests
   handleClientRequests();
 
-  // Check distance from phone (Bluetooth) and obstacles (LiDAR)
+  // Check sensor and Bluetooth readings
   int phoneDistance = getPhoneDistance();
-  int lidarDistance = readLidarDistance();
+  int leftUltrasonic = readUltrasonicDistance(TRIG_PIN_LEFT_ULTRASONIC, ECHO_PIN_LEFT_ULTRASONIC);
+  int rightUltrasonic = readUltrasonicDistance(TRIG_PIN_RIGHT_ULTRASONIC, ECHO_PIN_RIGHT_ULTRASONIC);
+  int lidar = readLidarDistance();
 
-  // Execute pathfinding and motor control based on sensor data
-  handlePathfinding(phoneDistance, lidarDistance);
+  // Pathfinding and obstacle avoidance
+  handlePathfinding(phoneDistance, leftUltrasonic, rightUltrasonic, lidar);
 
-  // Add a small delay for stability
-  delay(100);  // Adjust delay based on performance needs
+  delay(100);
 }
 
 /**
-   Pathfinding logic based on phone distance and LiDAR sensor readings.
+   Pathfinding logic based on phone distance and ultrasonic/LiDAR sensor readings.
    Adjusts motor speed and direction accordingly.
-   @param phoneDistance: Distance from the phone in cm (via Bluetooth).
-   @param lidarDistance: Distance from the obstacle in cm (via LiDAR).
 */
-void handlePathfinding(int phoneDistance, int lidarDistance) {
-  if (lidarDistance >= 300 || lidarDistance <= 0) {  // No obstacle detected
-    // Adjust speed based on the distance to the phone
+void handlePathfinding(int phoneDistance, int leftUltrasonic, int rightUltrasonic, int lidar) {
+  // If the path is clear (no obstacle detected)
+  if ((lidar >= lidarDistance || lidar <= 0) &&
+      (leftUltrasonic > leftUltrasonicDistance) &&
+      (rightUltrasonic > rightUltrasonicDistance)) {
+    // Adjust speed based on phone distance
     double speed = calculateSpeed(phoneDistance);
     setMotorPWM(speed, speed);  // Move forward at the calculated speed
-  } else {  // Obstacle detected
+  } else {
+    // Obstacle detected, check if we can reverse
     if (isRearPathClear()) {
-      performReverse();  // Reverse if the path behind is clear
+      performReverse();  // Reverse if the rear path is clear
     } else {
       setMotorPWM(0, 0);  // Stop if unable to reverse
-      errorHandler.displayError(ErrorType::MOTOR_ERROR, "Path blocked, unable to reverse.");
     }
   }
 }

@@ -4,65 +4,65 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
-#include "ErrorHandling.h"  // Include error handling for Wi-Fi issues
 
 // Wi-Fi credentials and settings
 const char* ssid = "HoverKart";
 const char* password = "kartpassword";
-const char* hostname = "hoverkart";  // Hostname for the Wi-Fi AP
+const char* hostname = "hoverkart";
 
-// Web server object on port 80
+// Web server object
 WebServer server(80);
 
-// PID tuning parameters and following distance variables (configurable via web interface)
+// PID tuning parameters and following distance variables
 double webKp = 2.5, webKi = 6.0, webKd = 1.2;
 int followingDistance = 100;
 int waitTime = 0;
+
+// Obstacle detection distances (modifiable via web interface)
+int ultrasonicLeftDistance = 300;
+int ultrasonicRightDistance = 300;
+int ultrasonicRearDistance = 300;
+int lidarDistanceThreshold = 1000;
 
 // Function prototypes
 void setupWiFi();
 void handleRoot();
 void handleUpdatePID();
 void handleUpdateDistance();
+void handleUpdateObstacleDetection();
 void handleWaitMode();
 
 /**
-   Set up the Wi-Fi Access Point (AP) mode, assign the hostname, and start the web server.
-   Includes error handling in case of failure.
+   Setup Wi-Fi in AP mode and initialize the web server.
 */
 void setupWiFi() {
   WiFi.softAP(ssid, password);
-  WiFi.softAPsetHostname(hostname);  // Set the hostname
+  WiFi.softAPsetHostname(hostname);
 
-  Serial.println("Wi-Fi started in AP mode.");
-  Serial.println("Hostname: " + String(hostname));
-  Serial.println("IP Address: " + WiFi.softAPIP().toString());
-
-  // Start mDNS to resolve the hostname
   if (MDNS.begin(hostname)) {
-    Serial.println("MDNS responder started");
-    MDNS.addService("http", "tcp", 80);  // Add HTTP service
+    MDNS.addService("http", "tcp", 80);
   } else {
-    errorHandler.displayError(ErrorType::GENERAL_ERROR, "Error setting up MDNS responder.");
-    return;
   }
 
-  // Set up web server routes
   server.on("/", handleRoot);
   server.on("/updatePID", handleUpdatePID);
   server.on("/updateDistance", handleUpdateDistance);
+  server.on("/updateObstacleDetection", handleUpdateObstacleDetection);
   server.on("/waitMode", handleWaitMode);
 
-  // Start the web server
   server.begin();
 }
 
 /**
-   Root webpage that allows control of PID values, following distance, and wait mode.
-   Generates an HTML page for users to adjust settings.
+   Main control page that allows adjusting PID values, following distance, obstacle detection distances, and wait time.
 */
 void handleRoot() {
-  String page = "<html><head><title>Kart Control</title></head><body>";
+  String page = "<html><head><title>Kart Control</title>";
+  page += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  page += "<style>body {font-family: Arial; padding: 20px;} ";
+  page += "input[type=number], input[type=submit] {width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box;}";
+  page += "@media (min-width: 600px) {input[type=number], input[type=submit] {width: 50%;}}</style></head><body>";
+
   page += "<h1>Hover Kart Settings</h1>";
 
   // PID tuning form
@@ -77,6 +77,14 @@ void handleRoot() {
   page += "Following Distance (cm): <input type='number' name='distance' value='" + String(followingDistance) + "'><br>";
   page += "<input type='submit' value='Update Distance'></form><br>";
 
+  // Obstacle detection distance form
+  page += "<form action='/updateObstacleDetection' method='POST'>";
+  page += "Left Ultrasonic Distance (cm): <input type='number' name='leftDist' value='" + String(ultrasonicLeftDistance) + "'><br>";
+  page += "Right Ultrasonic Distance (cm): <input type='number' name='rightDist' value='" + String(ultrasonicRightDistance) + "'><br>";
+  page += "Rear Ultrasonic Distance (cm): <input type='number' name='rearDist' value='" + String(ultrasonicRearDistance) + "'><br>";
+  page += "LiDAR Distance (cm): <input type='number' name='lidarDist' value='" + String(lidarDistanceThreshold) + "'><br>";
+  page += "<input type='submit' value='Update Obstacle Detection'></form><br>";
+
   // Wait mode form
   page += "<form action='/waitMode' method='POST'>";
   page += "Wait Time (seconds): <input type='number' name='wait' value='" + String(waitTime) + "'><br>";
@@ -84,51 +92,56 @@ void handleRoot() {
 
   page += "</body></html>";
 
-  // Send the page content to the client
   server.send(200, "text/html", page);
 }
 
 /**
-   Handle the form submission for updating PID values.
-   Updates the PID parameters based on user input from the web form.
+   Handle form submission to update PID values.
 */
 void handleUpdatePID() {
   if (server.hasArg("kp")) webKp = server.arg("kp").toDouble();
   if (server.hasArg("ki")) webKi = server.arg("ki").toDouble();
   if (server.hasArg("kd")) webKd = server.arg("kd").toDouble();
 
-  // Redirect back to the main page
   server.sendHeader("Location", "/");
   server.send(303);
 }
 
 /**
-   Handle the form submission for updating the following distance.
-   Updates the following distance variable based on user input.
+   Handle form submission to update following distance.
 */
 void handleUpdateDistance() {
   if (server.hasArg("distance")) followingDistance = server.arg("distance").toInt();
 
-  // Redirect back to the main page
   server.sendHeader("Location", "/");
   server.send(303);
 }
 
 /**
-   Handle the form submission for setting the wait mode timer.
-   Sets the wait mode timer based on user input from the web form.
+   Handle form submission to update obstacle detection distances for the ultrasonic sensors and LiDAR.
+*/
+void handleUpdateObstacleDetection() {
+  if (server.hasArg("leftDist")) ultrasonicLeftDistance = server.arg("leftDist").toInt();
+  if (server.hasArg("rightDist")) ultrasonicRightDistance = server.arg("rightDist").toInt();
+  if (server.hasArg("rearDist")) ultrasonicRearDistance = server.arg("rearDist").toInt();
+  if (server.hasArg("lidarDist")) lidarDistanceThreshold = server.arg("lidarDist").toInt();
+
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
+
+/**
+   Handle form submission to set the wait mode timer.
 */
 void handleWaitMode() {
   if (server.hasArg("wait")) waitTime = server.arg("wait").toInt();
 
-  // Redirect back to the main page
   server.sendHeader("Location", "/");
   server.send(303);
 }
 
 /**
-   Handle HTTP client requests.
-   This function needs to be called in the loop to handle incoming web requests.
+   Handle incoming client requests to the web server.
 */
 void handleClientRequests() {
   server.handleClient();

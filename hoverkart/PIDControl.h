@@ -2,7 +2,6 @@
 #define PIDCONTROL_H
 
 #include <PID_v1.h>
-#include "ErrorHandling.h"  // Ensure error handling is included
 
 // PID tuning parameters (Kp, Ki, Kd) for motor control
 double Kp = 2.5, Ki = 6.0, Kd = 1.2;
@@ -14,8 +13,8 @@ PID leftWheelPID(&inputLeft, &outputLeft, &setpointLeft, Kp, Ki, Kd, DIRECT);
 PID rightWheelPID(&inputRight, &outputRight, &setpointRight, Kp, Ki, Kd, DIRECT);
 
 // Speed constraints for motor control
-extern const int MIN_SPEED;
-extern const int MAX_SPEED;
+const int MIN_SPEED = 1000;
+const int MAX_SPEED = 2000;
 
 /**
    Set up the PID control for both motors, with automatic mode and speed limits.
@@ -36,7 +35,6 @@ void setupPID() {
 double calculateSpeed(int distanceToPhone) {
   // Ensure the input distance is valid
   if (distanceToPhone < 0) {
-    errorHandler.displayError(ErrorType::GENERAL_ERROR, "Invalid distance to phone.");
     return MIN_SPEED;  // Return minimum speed in case of invalid input
   }
 
